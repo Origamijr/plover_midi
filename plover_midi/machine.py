@@ -2,6 +2,8 @@
 from fnmatch import fnmatchcase
 
 from rtmidi import MidiIn
+import plover_midi.fluidsynth as fluidsynth
+import time
 
 from plover.machine.base import ThreadedStenotypeBase
 from plover import log
@@ -9,23 +11,43 @@ from plover import log
 BASE_NOTES = 'C C# D D# E F F# G G# A A# B'.split()
 NUM_OCTAVES = 10
 
+KEYMAPS = {
+    'C#2': '#',
+    'C2': 'S-',
+    'D#2': 'T-',
+    'E2': 'K-',
+    'D2': 'T-',
+    'F#2': 'P-',
+    'F2': 'W-',
+    'G#2': 'H-',
+    'G2': 'R-',
+    'A2': 'A-',
+    'B2': 'O-',
+    'C#3': '*',
+    'A#2': '-P',
+    'C3': '-E',
+    'D3': '-U',
+    'D#3': '-F',
+    'E3': '-R',
+    'F#3': '-P',
+    'F3': '-B',
+    'G#3': '-L',
+    'G3': '-G',
+    'B3': '-T',
+    'A3': '-S',
+    'C4': '-D',
+    'A#3': '-Z'
+}
+
 
 class MidiStenotype(ThreadedStenotypeBase):
 
     PORT = '*'
 
     KEYS_LAYOUT = '''
-        C-2 C#-2 D-2 D#-2 E-2 F-2 F#-2 G-2 G#-2 A-2 A#-2 B-2
-        C-1 C#-1 D-1 D#-1 E-1 F-1 F#-1 G-1 G#-1 A-1 A#-1 B-1
-        C0  C#0  D0  D#0  E0  F0  F#0  G0  G#0  A0  A#0  B0
-        C1  C#1  D1  D#1  E1  F1  F#1  G1  G#1  A1  A#1  B1
         C2  C#2  D2  D#2  E2  F2  F#2  G2  G#2  A2  A#2  B2
         C3  C#3  D3  D#3  E3  F3  F#3  G3  G#3  A3  A#3  B3
-        C4  C#4  D4  D#4  E4  F4  F#4  G4  G#4  A4  A#4  B4
-        C5  C#5  D5  D#5  E5  F5  F#5  G5  G#5  A5  A#5  B5
-        C6  C#6  D6  D#6  E6  F6  F#6  G6  G#6  A6  A#6  B6
-        C7  C#7  D7  D#7  E7  F7  F#7  G7  G#7  A7  A#7  B7
-        C8  C#8  D8  D#8  E8  F8  F#8  G8
+        C4
     '''
 
     def __init__(self, params):
@@ -39,6 +61,11 @@ class MidiStenotype(ThreadedStenotypeBase):
                 self._note_to_key.append(note + str(octave - 2))
         self._pressed = set()
         self._stroke = set()
+        self.fs = fluidsynth.Synth()
+        self.fs.start()
+        sfid = self.fs.sfload("C:/Users/origa/Desktop/python_stuff/plover_midi/plover_midi/Touhou.sf2")
+        self.fs.program_select(0, sfid, 0, 0)
+        self.volume = 1
 
     def run(self):
         log.info('available ports: %s', ', '.join(self._midi.get_ports()))
@@ -63,7 +90,10 @@ class MidiStenotype(ThreadedStenotypeBase):
 
     def _on_message(self, params, data):
         message, delta = params
-        log.debug('message: %r', message)
+        log.debug('message: [%#x ,%d, %d]', *message)
+        if message[0] == 0xB0 and message[1] == 75:
+            self.fs.cc(0, 7, message[2])
+            return
         if message[0] not in (0x80, 0x90):
             return
         # Note: some keyboards indicate key release by sending a note on
@@ -74,17 +104,22 @@ class MidiStenotype(ThreadedStenotypeBase):
         if pressed:
             self._pressed.add(key)
             self._stroke.add(key)
+            self.fs.noteon(0, message[1], int(self.volume*message[2]))
             return
+        else:
+            self.fs.noteoff(0, message[1])
         self._pressed.discard(key)
         if self._pressed:
             return
         stroke = self._stroke
         self._stroke = set()
-        steno_keys = self.keymap.keys_to_actions(stroke)
-        if not steno_keys:
-            return
-        log.debug('stroke: %r', steno_keys)
-        self._notify(steno_keys)
+        #steno_keys = self.keymap.keys_to_actions(stroke)
+        if 48 <= message[1] <= 72:
+            steno_keys = [KEYMAPS[key] for key in stroke]
+            if not steno_keys:
+                return
+            log.debug('stroke: %r', steno_keys)
+            self._notify(steno_keys)
 
     @classmethod
     def get_option_info(cls):

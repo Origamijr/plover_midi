@@ -1,3 +1,18 @@
+# Plover MIDI (with remaps)
+
+Fork of plover_midi to directly integrate mappings to a keyboard. This is just so that the MIDI device is used by only one application, meaning this plugin can directly use other MIDI control signals.
+
+Keys are mapped for a normal 24 key MIDI keyboard (I use an minilab mkII) close to the default English steno layout.
+
+Fluidsynth must be installed, as sound is also implemented. fluidsynth.py is directly taken from the original python bindings, but slightly modified. Use your own soundfont specified in  machine.py somewhere.
+
+Install like normal
+```
+{plover_console path here} -s plover_plugins install -e .
+```
+
+
+Original readme below
 # Plover MIDI
 
 Add support for MIDI keyboards/machines to [Plover](http://www.openstenoproject.org/).
